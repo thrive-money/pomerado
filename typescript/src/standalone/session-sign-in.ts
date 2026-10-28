@@ -1,5 +1,9 @@
 import { Data, Effect, Schema } from "effect";
-import type { SignInLogin, SignInRecipe } from "../destinations/sign-in-recipe.js";
+import type {
+  SignInLogin,
+  SignInRecipe,
+  SignInScreenFields,
+} from "../destinations/sign-in-recipe.js";
 import { MintFailure } from "../mint/contracts.js";
 import { CredentialRejectedField, type WebsiteCredentials } from "../runtime/authentication.js";
 import { failureDetail } from "../runtime/failure-detail.js";
@@ -124,6 +128,7 @@ export const makeRejectableLogin = <E>(
         return again === undefined ? Effect.succeed(answer) : Effect.fail(repeated(again));
       }),
     );
+  const baseValuesFor = base.valuesFor;
   const login: SignInLogin<E> = {
     held: () => {
       const held = base.held();
@@ -134,6 +139,19 @@ export const makeRejectableLogin = <E>(
       const field = held === undefined ? undefined : repeats(held);
       return held === undefined || field === undefined ? base.values : correct(field, held);
     }),
+    // The screen's own fields reach the question, as for the login underneath.
+    ...(baseValuesFor === undefined
+      ? {}
+      : {
+          valuesFor: (screen: SignInScreenFields) =>
+            Effect.suspend(() => {
+              const held = base.held();
+              const field = held === undefined ? undefined : repeats(held);
+              return held === undefined || field === undefined
+                ? baseValuesFor(screen)
+                : correct(field, held);
+            }),
+        }),
     correct,
   };
   /** The site rejected the login held now, in `field`, its identifier or its password. */

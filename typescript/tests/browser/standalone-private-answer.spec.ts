@@ -1,6 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import { Effect } from "effect";
-import { localSignInLogin, makeSignInBrowser } from "../../src/standalone/authentication.js";
+import {
+  localSignInLogin,
+  makeSignInBrowser,
+  repeatedLoginFailure,
+} from "../../src/standalone/authentication.js";
+import { makeRejectableLogin } from "../../src/standalone/session-sign-in.js";
 import { makeInputAsker } from "../../src/inputs/callback.js";
 import { makeRunSecrets } from "../../src/inputs/secrets.js";
 import {
@@ -647,10 +652,14 @@ const askedOnScreen = async (page: Page, site: string, answer: object, step: Sig
     questions.push(...request.questions);
     return Effect.succeed({ login: { type: "credential" as const, value: { ...answer, saveLogin: false } } });
   };
-  const held = localSignInLogin({ ask: owner, register: secrets.register, siteOrigin: site });
+  // Through the wrapper the mint host puts around the login, so the labels survive it.
+  const held = makeRejectableLogin(
+    localSignInLogin({ ask: owner, register: secrets.register, siteOrigin: site }),
+    repeatedLoginFailure,
+  );
   const recorder = makeSignInRecorder({
     browser: signIn,
-    login: held,
+    login: held.login,
     ask: owner,
     secrets,
     review: () => Effect.void,
