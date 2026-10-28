@@ -243,6 +243,8 @@ export interface SignInBrowser<E> {
 export interface SignInScreenFields {
   readonly identifierLabel?: string | undefined;
   readonly passwordLabel?: string | undefined;
+  /** The kinds the screen's identifier field takes: a phone-only field takes a phone number. */
+  readonly identifierKinds?: readonly ("username" | "email" | "phone" | "account_number")[] | undefined;
   /** Whether the screen has a password field; one with none is never asked for a password. */
   readonly hasPassword: boolean;
 }

@@ -268,9 +268,16 @@ export const localSignInLogin = (options: {
         return yield* loginFailure(new Error("The login answer holds no username and password"));
       options.register(answer.value.username);
       if (answer.value.password !== undefined) options.register(answer.value.password);
+      // A screen whose identifier field takes one kind only (a mobile number) holds the answer as
+      // that kind, so it fills that field and is not asked for the kind again.
+      const kinds = screen?.identifierKinds ?? [];
+      const only = kinds.length === 1 ? kinds[0] : undefined;
       held = {
         username: answer.value.username,
         ...(answer.value.password === undefined ? {} : { password: answer.value.password }),
+        ...(only === "phone" ? { phone: answer.value.username } : {}),
+        ...(only === "email" ? { email: answer.value.username } : {}),
+        ...(only === "account_number" ? { accountNumber: answer.value.username } : {}),
       };
       return held;
     });

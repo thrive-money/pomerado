@@ -241,7 +241,9 @@ const screenFields = (
     };
   },
 ): SignInScreenFields => {
-  const identifierSlots = ["username", "email", "phone", "account_number"];
+  const identifierSlots = ["username", "email", "phone", "account_number"] as const;
+  type Kind = (typeof identifierSlots)[number];
+  const identifierKinds = new Set<Kind>();
   let identifierLabel: string | undefined;
   let passwordLabel: string | undefined;
   let hasPassword = false;
@@ -253,14 +255,17 @@ const screenFields = (
       if (passwordLabel === undefined && label !== "") passwordLabel = label;
     } else if (
       field.accepts !== undefined ||
-      (field.slot !== undefined && identifierSlots.includes(field.slot))
+      (field.slot !== undefined && identifierSlots.some((kind) => kind === field.slot))
     ) {
       if (identifierLabel === undefined && label !== "") identifierLabel = label;
+      for (const kind of field.accepts ?? [field.slot ?? ""])
+        for (const known of identifierSlots) if (known === kind) identifierKinds.add(known);
     }
   }
   return {
     ...(identifierLabel === undefined ? {} : { identifierLabel }),
     ...(passwordLabel === undefined ? {} : { passwordLabel }),
+    ...(identifierKinds.size === 0 ? {} : { identifierKinds: [...identifierKinds] }),
     hasPassword,
   };
 };
