@@ -249,6 +249,79 @@ export interface SignInScreenFields {
   readonly hasPassword: boolean;
 }
 
+/** What a field that takes one kind of identifier is called when the page gives it no label. */
+const identifierKindName = (kind: string) =>
+  kind === "phone"
+    ? "Mobile number"
+    : kind === "email"
+      ? "Email"
+      : kind === "account_number"
+        ? "Account number"
+        : undefined;
+
+/** The first of `texts` that holds a character, trimmed and bounded. */
+const firstText = (...texts: readonly (string | null | undefined)[]) => {
+  for (const text of texts) {
+    const trimmed = (text ?? "").trim().slice(0, 200);
+    if (trimmed !== "") return trimmed;
+  }
+  return undefined;
+};
+
+/**
+ * The login fields a set of sign-in fields asks for: the kinds the identifier takes, whether there
+ * is a password, and the labels the site gave them when `shown` (what inspection read of each
+ * field, in the same order) is known. A field the page only gave an example for, such as
+ * "Eg. 9876543210", is named by the one kind it takes (a mobile number) before that example.
+ */
+export const signInScreenFields = (
+  fields: readonly {
+    readonly slot?: string | undefined;
+    readonly accepts?: readonly string[] | undefined;
+  }[],
+  shown: readonly (
+    | {
+        readonly label?: string | null | undefined;
+        readonly ariaLabel?: string | null | undefined;
+        readonly placeholder?: string | null | undefined;
+      }
+    | undefined
+  )[] = [],
+): SignInScreenFields => {
+  const identifierSlots = ["username", "email", "phone", "account_number"] as const;
+  type Kind = (typeof identifierSlots)[number];
+  const identifierKinds = new Set<Kind>();
+  let identifierLabel: string | undefined;
+  let identifierExample: string | undefined;
+  let passwordLabel: string | undefined;
+  let hasPassword = false;
+  for (const [index, field] of fields.entries()) {
+    const seen = shown[index];
+    const label = firstText(seen?.label, seen?.ariaLabel);
+    if (field.slot === "password") {
+      hasPassword = true;
+      if (passwordLabel === undefined) passwordLabel = label ?? firstText(seen?.placeholder);
+    } else if (
+      field.accepts !== undefined ||
+      (field.slot !== undefined && identifierSlots.some((kind) => kind === field.slot))
+    ) {
+      if (identifierLabel === undefined) identifierLabel = label;
+      if (identifierExample === undefined) identifierExample = firstText(seen?.placeholder);
+      for (const kind of field.accepts ?? [field.slot ?? ""])
+        for (const known of identifierSlots) if (known === kind) identifierKinds.add(known);
+    }
+  }
+  const kinds = [...identifierKinds];
+  const named = kinds.length === 1 ? identifierKindName(kinds[0] ?? "") : undefined;
+  const shownLabel = identifierLabel ?? named ?? identifierExample;
+  return {
+    ...(shownLabel === undefined ? {} : { identifierLabel: shownLabel }),
+    ...(passwordLabel === undefined ? {} : { passwordLabel }),
+    ...(kinds.length === 0 ? {} : { identifierKinds: kinds }),
+    hasPassword,
+  };
+};
+
 /** Where a sign-in's login comes from. */
 export interface SignInLogin<E> {
   /** The login already given, if any. */

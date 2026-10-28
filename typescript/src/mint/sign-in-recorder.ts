@@ -19,6 +19,7 @@ import {
 import {
   SignInRecipe,
   signInRecipe,
+  signInScreenFields,
   type SignInBrowser,
   type SignInLogin,
   type SignInScreenFields,
@@ -240,35 +241,7 @@ const screenFields = (
       }[];
     };
   },
-): SignInScreenFields => {
-  const identifierSlots = ["username", "email", "phone", "account_number"] as const;
-  type Kind = (typeof identifierSlots)[number];
-  const identifierKinds = new Set<Kind>();
-  let identifierLabel: string | undefined;
-  let passwordLabel: string | undefined;
-  let hasPassword = false;
-  for (const [index, field] of step.fields.entries()) {
-    const shown = inspected.screen.fields[index];
-    const label = (shown?.label ?? shown?.ariaLabel ?? shown?.placeholder ?? "").trim().slice(0, 200);
-    if (field.slot === "password") {
-      hasPassword = true;
-      if (passwordLabel === undefined && label !== "") passwordLabel = label;
-    } else if (
-      field.accepts !== undefined ||
-      (field.slot !== undefined && identifierSlots.some((kind) => kind === field.slot))
-    ) {
-      if (identifierLabel === undefined && label !== "") identifierLabel = label;
-      for (const kind of field.accepts ?? [field.slot ?? ""])
-        for (const known of identifierSlots) if (known === kind) identifierKinds.add(known);
-    }
-  }
-  return {
-    ...(identifierLabel === undefined ? {} : { identifierLabel }),
-    ...(passwordLabel === undefined ? {} : { passwordLabel }),
-    ...(identifierKinds.size === 0 ? {} : { identifierKinds: [...identifierKinds] }),
-    hasPassword,
-  };
-};
+): SignInScreenFields => signInScreenFields(step.fields, inspected.screen.fields);
 
 export const makeSignInRecorder = (input: {
   readonly browser: SignInBrowser<never> &

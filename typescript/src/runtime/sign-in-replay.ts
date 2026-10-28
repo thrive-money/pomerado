@@ -4,6 +4,7 @@ import type { AutofillSignedInCheck } from "../destinations/autofill-step.js";
 import { type MarkerSettle, settledMarkerCheck } from "../destinations/marker-settle.js";
 import {
   decodeSignInRecipe,
+  signInScreenFields,
   type SignInBrowser,
   type SignInLogin,
   type SignInRecipe,
@@ -365,7 +366,14 @@ export const signInForRun = <E>(input: {
     const runLogin = yield* makeRunLogin({
       held: input.login.held(),
       passwordless: false,
-      read: input.login.values.pipe(Effect.mapError(loginUnanswered)),
+      // The one login question names what the whole recipe takes: its kinds, and a password only
+      // when some screen has one.
+      read: (input.login.valuesFor === undefined
+        ? input.login.values
+        : input.login.valuesFor(
+            signInScreenFields(recipe.steps.flatMap((recipeStep) => recipeStep.fields)),
+          )
+      ).pipe(Effect.mapError(loginUnanswered)),
       register: () => Effect.void,
     });
     const correct = (field: CredentialRejectedField, held: WebsiteCredentials, triesLeft: number) =>
