@@ -239,12 +239,27 @@ export interface SignInBrowser<E> {
   readonly authenticationOrigins: readonly string[];
 }
 
+/** The login fields of one sign-in screen, as the site words them. */
+export interface SignInScreenFields {
+  readonly identifierLabel?: string | undefined;
+  readonly passwordLabel?: string | undefined;
+  /** Whether the screen has a password field; one with none is never asked for a password. */
+  readonly hasPassword: boolean;
+}
+
 /** Where a sign-in's login comes from. */
 export interface SignInLogin<E> {
   /** The login already given, if any. */
   readonly held: () => WebsiteCredentials | undefined;
   /** The login, asked for once when none is held. */
   readonly values: Effect.Effect<WebsiteCredentials, E>;
+  /**
+   * `values` for the screen the login is needed on: the question uses the screen's own labels and
+   * asks for no password the screen lacks. A login without it asks `values`.
+   */
+  readonly valuesFor?:
+    | ((screen: SignInScreenFields) => Effect.Effect<WebsiteCredentials, E>)
+    | undefined;
   /**
    * A corrected login after the site rejected `field` of `held`; `triesLeft`, this one included,
    * when the sign-in bounds its corrections.

@@ -10,7 +10,7 @@ import {
 import type { CredentialKeyboard } from "../../src/destinations/credential-keyboard.js";
 import type { SignInStep } from "../../src/mint/contracts.js";
 import { makeSignInRecorder } from "../../src/mint/sign-in-recorder.js";
-import type { InputAsker } from "../../src/runtime/input-request.js";
+import type { InputAsker, Question } from "../../src/runtime/input-request.js";
 import { signInForRun } from "../../src/runtime/sign-in-replay.js";
 import { expectNotCarried, hostKeyboard, hostPage } from "./autofill-host-page.js";
 
@@ -628,4 +628,68 @@ test("a CAPTCHA reaches the owner as a picture question and only their answer is
   expect(asked[0]).toMatchObject({ id: "private_answer", type: "secret", picture: { mime: "image/png" } });
   // A picture's answer is single use: no save offer rides with it.
   expect(JSON.stringify(asked)).not.toContain("save");
+});
+
+// The login question names the fields of the screen it is asked on, in the site's own words, and a
+// screen with no password field is never asked for one.
+const askedOnScreen = async (page: Page, site: string, answer: object, step: SignInStep) => {
+  const browser = await hostPage(page);
+  const secrets = makeRunSecrets();
+  const signIn = makeSignInBrowser({
+    page: browser,
+    keyboard: (await hostKeyboard(page)).keyboard,
+    siteOrigin: site,
+    authenticationOrigins: [],
+    typing: { typed: false },
+  });
+  const questions: Question[] = [];
+  const owner: InputAsker = (request) => {
+    questions.push(...request.questions);
+    return Effect.succeed({ login: { type: "credential" as const, value: { ...answer, saveLogin: false } } });
+  };
+  const held = localSignInLogin({ ask: owner, register: secrets.register, siteOrigin: site });
+  const recorder = makeSignInRecorder({
+    browser: signIn,
+    login: held,
+    ask: owner,
+    secrets,
+    review: () => Effect.void,
+    site: new URL(site).hostname,
+    signedOutPages: () => [],
+  });
+  await Effect.runPromise(recorder.step(step, undefined, Effect.void));
+  return questions;
+};
+
+test("a login with no password field is asked by the screen's own label and never for a password", async ({ page }) => {
+  const site = "https://npci.example.test";
+  await page.route(`${site}/login`, (route) => route.fulfill({ contentType: "text/html", body:
+    '<form><label>Enter Mobile Number<input id="mobile" name="mobile"></label><button id="go">Get OTP</button></form>' }));
+  await page.goto(`${site}/login`);
+  const questions = await askedOnScreen(page, site, { username: "5550001234" }, {
+    fields: [{ selector: "#mobile", accepts: ["phone"] }],
+  });
+  expect(questions).toHaveLength(1);
+  expect(questions[0]).toMatchObject({
+    type: "credential",
+    screen: { identifierLabel: "Enter Mobile Number", hasPassword: false },
+  });
+  expect(questions[0]).not.toHaveProperty("screen.passwordLabel");
+  expect(await page.locator("#mobile").inputValue()).toBe("5550001234");
+});
+
+test("a login with an identifier and a password is asked by the screen's own labels", async ({ page }) => {
+  const site = "https://bank.example.test";
+  await page.route(`${site}/login`, (route) => route.fulfill({ contentType: "text/html", body:
+    '<form><label>Customer ID<input id="id" name="id"></label><label>PIN<input id="pin" name="pin" type="password"></label><button id="go">Log in</button></form>' }));
+  await page.goto(`${site}/login`);
+  const questions = await askedOnScreen(page, site, { username: "cust-1", password: "synthetic-pin" }, {
+    fields: [{ selector: "#id", accepts: ["username"] }, { selector: "#pin", slot: "password" }],
+  });
+  expect(questions[0]).toMatchObject({
+    type: "credential",
+    screen: { identifierLabel: "Customer ID", passwordLabel: "PIN", hasPassword: true },
+  });
+  expect(await page.locator("#id").inputValue()).toBe("cust-1");
+  expect(await page.locator("#pin").inputValue()).toBe("synthetic-pin");
 });

@@ -204,6 +204,23 @@ export const CredentialQuestion = Schema.Struct({
    * the site, or want only what it shows signed out. Absent, a login is the only answer.
    */
   allowDecline: Schema.optional(Schema.Boolean),
+  /**
+   * The sign-in screen this login is asked for, in the site's own words: the label of its
+   * identifier field and of its password field, and whether it has a password field at all. A
+   * screen with none is never asked for one. Absent when the login is asked before any screen is
+   * shown.
+   */
+  screen: Schema.optional(
+    Schema.Struct({
+      identifierLabel: Schema.optional(
+        Schema.String.pipe(Schema.minLength(1), Schema.maxLength(200)),
+      ),
+      passwordLabel: Schema.optional(
+        Schema.String.pipe(Schema.minLength(1), Schema.maxLength(200)),
+      ),
+      hasPassword: Schema.Boolean,
+    }),
+  ),
 });
 
 /**

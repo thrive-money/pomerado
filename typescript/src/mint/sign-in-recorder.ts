@@ -21,6 +21,7 @@ import {
   signInRecipe,
   type SignInBrowser,
   type SignInLogin,
+  type SignInScreenFields,
 } from "../destinations/sign-in-recipe.js";
 import type { CredentialRejectedField, WebsiteCredentials } from "../runtime/authentication.js";
 import { logicalRejectedField, recordedRejections } from "../runtime/autofill-rejection.js";
@@ -219,6 +220,51 @@ const unansweredStep = (h: AutofillHost, unanswered: Unanswered) => {
  * recovery code a fresh answer on its next screen. A marker a signed-out page shows
  * (`signedOutPages`), or a sign-in page's path, is refused before the page is read.
  */
+/**
+ * The login fields of a screen as the site words them, from what inspection read of each field: the
+ * identifier's label, the password's, and whether the screen has a password at all.
+ */
+const screenFields = (
+  step: {
+    readonly fields: readonly {
+      readonly slot?: string | undefined;
+      readonly accepts?: readonly string[] | undefined;
+    }[];
+  },
+  inspected: {
+    readonly screen: {
+      readonly fields: readonly {
+        readonly label?: string | null | undefined;
+        readonly ariaLabel?: string | null | undefined;
+        readonly placeholder?: string | null | undefined;
+      }[];
+    };
+  },
+): SignInScreenFields => {
+  const identifierSlots = ["username", "email", "phone", "account_number"];
+  let identifierLabel: string | undefined;
+  let passwordLabel: string | undefined;
+  let hasPassword = false;
+  for (const [index, field] of step.fields.entries()) {
+    const shown = inspected.screen.fields[index];
+    const label = (shown?.label ?? shown?.ariaLabel ?? shown?.placeholder ?? "").trim().slice(0, 200);
+    if (field.slot === "password") {
+      hasPassword = true;
+      if (passwordLabel === undefined && label !== "") passwordLabel = label;
+    } else if (
+      field.accepts !== undefined ||
+      (field.slot !== undefined && identifierSlots.includes(field.slot))
+    ) {
+      if (identifierLabel === undefined && label !== "") identifierLabel = label;
+    }
+  }
+  return {
+    ...(identifierLabel === undefined ? {} : { identifierLabel }),
+    ...(passwordLabel === undefined ? {} : { passwordLabel }),
+    hasPassword,
+  };
+};
+
 export const makeSignInRecorder = (input: {
   readonly browser: SignInBrowser<never> &
     Pick<SignInReplayBrowser<Error>, "markerVisible" | "approvalNumber" | "open">;
@@ -553,7 +599,9 @@ export const makeSignInRecorder = (input: {
         return shown(result(identifierUnobserved));
       yield* dispatch;
       if (held === undefined && step.fields.length > 0) {
-        held = yield* login.values;
+        held = yield* login.valuesFor === undefined
+          ? login.values
+          : login.valuesFor(screenFields(step, inspected));
         step = values.resolve(request, held);
       }
       const valued =

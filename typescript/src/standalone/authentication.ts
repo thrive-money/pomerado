@@ -12,7 +12,11 @@ import {
 } from "../destinations/autofill-step.js";
 import { rememberTyping } from "../destinations/autofill-typed-page.js";
 import type { CredentialKeyboard } from "../destinations/credential-keyboard.js";
-import type { SignInBrowser, SignInLogin } from "../destinations/sign-in-recipe.js";
+import type {
+  SignInBrowser,
+  SignInLogin,
+  SignInScreenFields,
+} from "../destinations/sign-in-recipe.js";
 import { MintFailure } from "../mint/contracts.js";
 import type { CredentialRejectedField, WebsiteCredentials } from "../runtime/authentication.js";
 import { credentialMessage, credentialPrompt } from "../runtime/credential-prompts.js";
@@ -221,6 +225,8 @@ export const localSignInLogin = (options: {
   readonly siteOrigin: string;
 }): SignInLogin<MintFailure> => {
   let held: WebsiteCredentials | undefined;
+  // The screen the login was first asked for: a correction names the same fields.
+  let screen: SignInScreenFields | undefined;
   // The first ask may be declined: the owner has no account, or wants the public part only.
   const askLogin = (
     reason: "missing_credentials" | "invalid_credentials",
@@ -244,6 +250,7 @@ export const localSignInLogin = (options: {
               siteOrigin: options.siteOrigin,
               ...(reason === "missing_credentials" ? { allowDecline: true } : {}),
               ...(username === undefined || username === "" ? {} : { username }),
+              ...(screen === undefined ? {} : { screen }),
             },
           ],
         })
@@ -251,15 +258,20 @@ export const localSignInLogin = (options: {
       const answer = answers["login"];
       if (answer?.type === "credential" && answer.value.declined !== undefined)
         return yield* new MintFailure({ code: "Unavailable", loginDeclined: answer.value.declined });
+      // A screen with no password field asks for none, so its login holds only the identifier.
+      const needsPassword = screen?.hasPassword !== false;
       if (
         answer?.type !== "credential" ||
         answer.value.username === undefined ||
-        answer.value.password === undefined
+        (needsPassword && answer.value.password === undefined)
       )
         return yield* loginFailure(new Error("The login answer holds no username and password"));
       options.register(answer.value.username);
-      options.register(answer.value.password);
-      held = { username: answer.value.username, password: answer.value.password };
+      if (answer.value.password !== undefined) options.register(answer.value.password);
+      held = {
+        username: answer.value.username,
+        ...(answer.value.password === undefined ? {} : { password: answer.value.password }),
+      };
       return held;
     });
   return {
@@ -267,6 +279,12 @@ export const localSignInLogin = (options: {
     values: Effect.suspend(() =>
       held === undefined ? askLogin("missing_credentials") : Effect.succeed(held),
     ),
+    valuesFor: (forScreen) =>
+      Effect.suspend(() => {
+        if (held !== undefined) return Effect.succeed(held);
+        screen = forScreen;
+        return askLogin("missing_credentials");
+      }),
     correct: (_field, rejected, triesLeft) =>
       askLogin("invalid_credentials", rejected.username, triesLeft),
   };

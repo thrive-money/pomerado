@@ -148,18 +148,23 @@ const answerQuestion = (question: Question): Effect.Effect<unknown, InputRequest
         return yield* line("> ", true);
       }
       case "credential": {
+        // The fields are named as the site's own screen words them, when it is known.
+        const screen = question.screen;
         const username =
           question.fields === "username_password"
             ? yield* line(
                 question.allowDecline === true
-                  ? "Username (leave empty to go on without signing in): "
-                  : "Username: ",
+                  ? `${screen?.identifierLabel ?? "Username"} (leave empty to go on without signing in): `
+                  : `${screen?.identifierLabel ?? "Username"}: `,
               )
             : undefined;
         // An empty username, where the question offers it, declines the login.
         if (question.allowDecline === true && username?.trim() === "")
           return { declined: "public_only", saveLogin: false };
-        const password = yield* line("Password: ", true);
+        // A screen with no password field asks for none.
+        if (screen?.hasPassword === false)
+          return { ...(username === undefined ? {} : { username }), saveLogin: false };
+        const password = yield* line(`${screen?.passwordLabel ?? "Password"}: `, true);
         return { ...(username === undefined ? {} : { username }), password, saveLogin: false };
       }
       case "confirm": {
