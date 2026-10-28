@@ -149,6 +149,7 @@ const runCli = (
       const result = yield* pomerado.mint(request);
       if (result.artifact === undefined) {
         process.stderr.write(`${result.summary}\n`);
+        if (result.stopReason !== undefined) process.stderr.write(`Stop reason: ${result.stopReason}\n`);
         process.exitCode = 1;
         return;
       }
