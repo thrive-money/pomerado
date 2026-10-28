@@ -1,4 +1,5 @@
 import type { AgentInputItem, ModelRequest, ModelSettings } from "@openai/agents";
+import { sentTtl } from "./cached-instructions.js";
 
 /**
  * Prompt caching on the Responses API. A request reads the longest cached prefix that ends at a
@@ -60,7 +61,9 @@ export const cachedDeveloperItem = (
       content: texts.map((text, index) => ({
         type: "input_text",
         text,
-        ...(index === last ? { prompt_cache_breakpoint: { mode: "explicit", ttl } } : {}),
+        ...(index === last
+          ? { prompt_cache_breakpoint: { mode: "explicit", ttl: sentTtl(ttl) } }
+          : {}),
       })),
     },
   };

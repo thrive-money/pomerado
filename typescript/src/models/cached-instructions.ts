@@ -12,6 +12,13 @@ import type {
  */
 export type PromptCacheTtl = "30m" | "12h";
 
+/**
+ * The lifetime a cache breakpoint is sent with. A provider that keeps writes only 30 minutes, such
+ * as Azure OpenAI, refuses `12h` with a 400; `POMERADO_PROMPT_CACHE_MAX_TTL=30m` sends `30m` there.
+ */
+export const sentTtl = (ttl: PromptCacheTtl): PromptCacheTtl =>
+  process.env["POMERADO_PROMPT_CACHE_MAX_TTL"] === "30m" ? "30m" : ttl;
+
 /** One developer message of a request's instructions, with a cache breakpoint at its end. */
 export interface InstructionsMessage {
   readonly text: string;
@@ -34,7 +41,7 @@ export const developerMessage = ({ text, breakpoint }: InstructionsMessage): Age
         text,
         ...(breakpoint === undefined
           ? {}
-          : { prompt_cache_breakpoint: { mode: "explicit", ttl: breakpoint } }),
+          : { prompt_cache_breakpoint: { mode: "explicit", ttl: sentTtl(breakpoint) } }),
       },
     ],
   },
