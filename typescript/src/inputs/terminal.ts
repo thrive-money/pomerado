@@ -161,11 +161,21 @@ const answerQuestion = (question: Question): Effect.Effect<unknown, InputRequest
         // An empty username, where the question offers it, declines the login.
         if (question.allowDecline === true && username?.trim() === "")
           return { declined: "public_only", saveLogin: false };
+        // A field that takes several kinds (a username or an email) asks which this one is.
+        const kinds = question.currentStep?.identifierKinds ?? [];
+        let identifierKind: (typeof kinds)[number] | undefined;
+        if (kinds.length > 1 && username !== undefined) {
+          const reply = (yield* line(`That is a ${kinds.join(" or ")}? `)).trim().toLowerCase();
+          identifierKind = kinds.find((kind) => kind === reply);
+        }
+        const who = {
+          ...(username === undefined ? {} : { username }),
+          ...(identifierKind === undefined ? {} : { identifierKind }),
+        };
         // A screen with no password field asks for none.
-        if (screen?.hasPassword === false)
-          return { ...(username === undefined ? {} : { username }), saveLogin: false };
+        if (screen?.hasPassword === false) return { ...who, saveLogin: false };
         const password = yield* line(`${screen?.passwordLabel ?? "Password"}: `, true);
-        return { ...(username === undefined ? {} : { username }), password, saveLogin: false };
+        return { ...who, password, saveLogin: false };
       }
       case "confirm": {
         const reply = (yield* line("[y/N] ")).trim().toLowerCase();

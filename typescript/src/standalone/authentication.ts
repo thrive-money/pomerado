@@ -251,6 +251,16 @@ export const localSignInLogin = (options: {
               ...(reason === "missing_credentials" ? { allowDecline: true } : {}),
               ...(username === undefined || username === "" ? {} : { username }),
               ...(screen === undefined ? {} : { screen }),
+              // The step the login is for: what the answer must hold, so a screen with no password
+              // takes an identifier alone and one with a single kind takes it as that kind.
+              ...(screen?.identifierKinds === undefined
+                ? {}
+                : {
+                    currentStep: {
+                      identifierKinds: screen.identifierKinds,
+                      password: screen.hasPassword,
+                    },
+                  }),
             },
           ],
         })

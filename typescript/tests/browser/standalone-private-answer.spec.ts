@@ -648,10 +648,12 @@ const askedOnScreen = async (page: Page, site: string, answer: object, step: Sig
     typing: { typed: false },
   });
   const questions: Question[] = [];
-  const owner: InputAsker = (request) => {
+  // The real answer check, as the gateway runs it: a login without a password is accepted only
+  // where the question says the screen has none.
+  const owner = makeInputAsker((request) => {
     questions.push(...request.questions);
-    return Effect.succeed({ login: { type: "credential" as const, value: { ...answer, saveLogin: false } } });
-  };
+    return Effect.succeed({ login: { ...answer, saveLogin: false } });
+  });
   // Through the wrapper the mint host puts around the login, so the labels survive it.
   const held = makeRejectableLogin(
     localSignInLogin({ ask: owner, register: secrets.register, siteOrigin: site }),
@@ -701,4 +703,19 @@ test("a login with an identifier and a password is asked by the screen's own lab
   });
   expect(await page.locator("#id").inputValue()).toBe("cust-1");
   expect(await page.locator("#pin").inputValue()).toBe("synthetic-pin");
+});
+
+test("a screen with no password field refuses an answer that brings one, and a login without one is accepted", async ({ page }) => {
+  const site = "https://npci.example.test";
+  await page.route(`${site}/login`, (route) => route.fulfill({ contentType: "text/html", body:
+    '<form><label>Enter Mobile Number<input id="mobile" name="mobile"></label><button id="go">Get OTP</button></form>' }));
+  await page.goto(`${site}/login`);
+  const questions = await askedOnScreen(page, site, { username: "5550001234" }, {
+    fields: [{ selector: "#mobile", accepts: ["phone"] }],
+  });
+  // The step the login is for is on the question, which is what makes the answer valid.
+  expect(questions[0]).toMatchObject({
+    type: "credential",
+    currentStep: { identifierKinds: ["phone"], password: false },
+  });
 });
