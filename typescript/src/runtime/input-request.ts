@@ -155,6 +155,16 @@ export const SecretQuestion = Schema.Struct({
     "billing_postal_code",
   ),
   maxLength: Schema.optional(Length),
+  /**
+   * A picture the owner reads to answer, such as a sign-in CAPTCHA (PNG, base64). The owner types
+   * what it shows; the host never reads or solves it.
+   */
+  picture: Schema.optional(
+    Schema.Struct({
+      mime: Schema.Literal("image/png"),
+      base64: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(190_000)),
+    }),
+  ),
 });
 export type SecretKind = typeof SecretQuestion.Type.secretKind;
 /** A website login. Only the host raises it, and its answer goes only to the credential store. */

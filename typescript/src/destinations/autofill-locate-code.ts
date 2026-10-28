@@ -262,6 +262,31 @@ const readQuestion = async (frame, selector) => {
     return text === null ? undefined : { locator: visible[0], text };
   } catch { return undefined; }
 };
+// A recorded question that is a picture (a sign-in CAPTCHA): the host captures it for the owner to
+// read and answer. It never reads, solves or sends it anywhere else.
+const readPicture = async (frame, selector) => {
+  if (selector == null || selector.includes(">>") || selector.includes("internal:")) return undefined;
+  try {
+    for (let scope = frame; scope.parentFrame() !== null; scope = scope.parentFrame())
+      if (!(await (await scope.frameElement()).isVisible())) return undefined;
+    const candidates = frame.locator(selector);
+    const count = await candidates.count();
+    if (count > 100) return undefined;
+    const visible = [];
+    for (let index = 0; index < count; index++)
+      if (await candidates.nth(index).isVisible()) visible.push(candidates.nth(index));
+    if (visible.length !== 1) return undefined;
+    const size = await visible[0].evaluate((element) => {
+      if (!element.matches("img,canvas,svg")) return null;
+      const box = element.getBoundingClientRect();
+      return { width: box.width, height: box.height };
+    }, undefined, { timeout: ${elementReadMs} });
+    if (size === null || size.width < 20 || size.height < 10 || size.width > 800 || size.height > 400)
+      return undefined;
+    const bytes = await visible[0].screenshot({ type: "png", timeout: ${elementReadMs} });
+    return bytes.length > 0 && bytes.length <= 140000 ? bytes.toString("base64") : undefined;
+  } catch { return undefined; }
+};
 const locate = async (selector, questionSelector) => {
   const visible = [];
   const frames = primary.frames();
@@ -339,7 +364,9 @@ const readControls = async (founds) => {
     const read = reads.get(found);
     const described = Object.fromEntries(Object.entries(read.described).map(([key, value]) => [key, key === "tag" ? value : clip(value)]));
     const question = await readQuestion(frame, questionSelector);
+    const picture = question === undefined ? await readPicture(frame, questionSelector) : undefined;
     if (question !== undefined) described.questionText = question.text;
+    else if (picture !== undefined) described.questionPicture = picture;
     // A recorded question with no one visible match, or none the host reads, is said so.
     else if (questionSelector != null) described.questionUnread = true;
     const control =

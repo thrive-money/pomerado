@@ -179,6 +179,15 @@ const answerQuestion = (site: string, shown: ShownAnswerField | undefined): Ques
       ? `Enter your ${site} security answer.`
       : `Enter your ${site} answer for "${label.slice(0, 200)}".`;
   })();
+  // A question that is a picture (a CAPTCHA): the owner reads it and types what it shows.
+  if (shown?.questionPicture !== undefined)
+    return {
+      id: "private_answer",
+      type: "secret",
+      secretKind: "private_text",
+      prompt: `Type the characters shown in the picture on the ${site} sign-in screen.`,
+      picture: { mime: "image/png", base64: shown.questionPicture },
+    };
   return { id: "private_answer", type: "secret", secretKind: "private_text", prompt };
 };
 
@@ -189,6 +198,8 @@ const answerQuestion = (site: string, shown: ShownAnswerField | undefined): Ques
 export interface ShownAnswerField {
   readonly questionText?: string | undefined;
   readonly questionUnread?: true | undefined;
+  /** The question as a picture (a CAPTCHA), PNG base64, for the owner to read. */
+  readonly questionPicture?: string | undefined;
   readonly label: string | null;
   readonly ariaLabel: string | null;
   readonly placeholder: string | null;
@@ -315,7 +326,9 @@ export const makeLoginFieldAsk = <E extends YieldableError>(dependencies: {
     attempt = 0,
   ): Effect.Effect<Unanswered | { value: string; consented: boolean }, E> =>
     Effect.gen(function* () {
-      const offered = offerSave ? saveOffer?.field : undefined;
+      // A picture's answer (a CAPTCHA) is single use: it is never offered for saving.
+      const offered =
+        offerSave && shown?.questionPicture === undefined ? saveOffer?.field : undefined;
       const questions = [
         answerQuestion(dependencies.site, shown),
         ...(offered === undefined ? [] : [offered]),

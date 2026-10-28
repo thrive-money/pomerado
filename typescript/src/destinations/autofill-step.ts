@@ -297,6 +297,11 @@ const Described = Schema.Struct({
    */
   questionUnread: Schema.optional(Schema.Literal(true)),
   /**
+   * A recorded question that is a picture (a sign-in CAPTCHA), captured as PNG base64 for the owner
+   * to read and answer. Inspection-only, never a recipe value.
+   */
+  questionPicture: Schema.optional(Schema.String.pipe(Schema.minLength(1), Schema.maxLength(190_000))),
+  /**
    * A code field that is one of the screen's one-character boxes (an input whose `maxlength` is 1,
    * or one with no `maxlength` that the page's script limits, among like inputs in one parent
    * element or each alone in its own wrapper element in one parent), when the screen shows two or

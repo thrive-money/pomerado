@@ -144,6 +144,12 @@ question has one visible match in that field's frame, supply its stable `questio
 its text. The host rereads the question before privately filling the answer. No answer reaches
 you, Guardian, generated code or the recipe. One-time and recovery codes keep their own slots.
 
+A sign-in CAPTCHA is the same slot. Its answer field is `slot: "private_answer"`, and its
+`questionSelector` is the picture element itself (an `img`, `canvas` or `svg` with one visible
+match). The host captures that picture, shows it to the owner as a question, and types only what
+the owner answers. Never read, describe, solve or click through a CAPTCHA yourself, and never
+report a build blocked for one: record the field and let the owner answer.
+
 Every selector a `signInStep` sends, in `fields`, `submit`, `methods`, `questionSelector`,
 `dismiss`, `rejectedMarkers`, `matchSelector` and `signedIn`, is a Playwright selector string, not a locator call as probes and
 the examples write. Prefer a stable `#id`, `[name=...]` or `data-testid=` selector. A role selector

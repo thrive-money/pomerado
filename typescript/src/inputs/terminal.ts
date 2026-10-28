@@ -1,3 +1,6 @@
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createInterface, emitKeypressEvents } from "node:readline";
 import { Effect } from "effect";
 import { makeInputAsker } from "./callback.js";
@@ -134,8 +137,16 @@ const answerQuestion = (question: Question): Effect.Effect<unknown, InputRequest
     switch (question.type) {
       case "text":
         return yield* line("> ");
-      case "secret":
+      case "secret": {
+        // A picture question (a sign-in CAPTCHA): saved to a file to open, and typed unmasked.
+        if (question.picture !== undefined) {
+          const path = join(tmpdir(), `pomerado-picture-${process.pid}-${Date.now()}.png`);
+          writeFileSync(path, Buffer.from(question.picture.base64, "base64"), { mode: 0o600 });
+          process.stderr.write(`Picture saved to ${path}\nOpen it and type what it shows.\n`);
+          return yield* line("> ");
+        }
         return yield* line("> ", true);
+      }
       case "credential": {
         const username =
           question.fields === "username_password"

@@ -566,3 +566,66 @@ test("the local rejection marker check reads only whether a marker shows, on the
   // Each read answered only whether the marker shows.
   for (const { answer } of browser.calls.slice(-9)) expect(typeof answer === "boolean" || JSON.stringify(answer).includes("popup_missing")).toBe(true);
 });
+
+// A sign-in CAPTCHA is a security answer whose question is a picture: the host captures it for the
+// owner to read, and only the owner's typed answer reaches the page.
+const pictureBody = (canvas: string) =>
+  `<label>Verification<input id="answer"></label>${canvas}<script>
+for (const c of document.querySelectorAll("canvas")) {
+  const g = c.getContext("2d"); g.fillStyle = "#333"; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = "#fff"; g.fillText("A7K2", 10, 20);
+}</script>`;
+
+test("a question that is a picture is captured for the owner, and only a usable picture", async ({ page }) => {
+  const site = "https://bank.example.test";
+  await page.route(`${site}/login`, (route) => route.fulfill({ contentType: "text/html", body: "" }));
+  await page.goto(`${site}/login`);
+  const browser = await hostPage(page);
+  const inspect = async (questionSelector: string) => {
+    const result = await Effect.runPromise(inspectAutofillStep({
+      step: { fields: [{ selector: "#answer", slot: "private_answer", questionSelector }] },
+      page: browser, siteOrigin: site, authenticationOrigins: [],
+    }));
+    if ("outcome" in result) throw new Error("Inspection refused");
+    return result.screen.fields[0];
+  };
+  await page.setContent(pictureBody('<canvas id="picture" width="120" height="40"></canvas>'));
+  const read = await inspect("#picture");
+  expect(Buffer.from(read?.questionPicture ?? "", "base64").subarray(0, 4)).toEqual(
+    Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+  );
+  expect(read).not.toHaveProperty("questionText");
+  expect(read).not.toHaveProperty("questionUnread");
+  // Too small to read, hidden, or one of two: said unread, never guessed.
+  await page.setContent(pictureBody('<canvas id="picture" width="8" height="4"></canvas>'));
+  expect(await inspect("#picture")).toMatchObject({ questionUnread: true });
+  await page.setContent(pictureBody('<canvas id="picture" width="120" height="40" hidden></canvas>'));
+  expect(await inspect("#picture")).toMatchObject({ questionUnread: true });
+  await page.setContent(
+    pictureBody('<canvas id="picture" width="120" height="40"></canvas><canvas id="picture2" width="120" height="40"></canvas>'),
+  );
+  expect(await inspect("canvas")).toMatchObject({ questionUnread: true });
+  expect(await inspect("canvas")).not.toHaveProperty("questionPicture");
+});
+
+test("a CAPTCHA reaches the owner as a picture question and only their answer is typed", async ({ page }) => {
+  const site = "https://bank.example.test";
+  await page.route(`${site}/login`, (route) => route.fulfill({
+    contentType: "text/html",
+    body: pictureBody('<canvas id="picture" width="120" height="40"></canvas>'),
+  }));
+  await page.goto(`${site}/login`);
+  const asked: unknown[] = [];
+  const auth = await localSignIn(page, site, makeInputAsker((request) => {
+    asked.push(...request.questions);
+    return Effect.succeed({ private_answer: "A7K2" });
+  }));
+  await Effect.runPromise(auth.fill({
+    fields: [{ selector: "#answer", slot: "private_answer", questionSelector: "#picture" }],
+  }));
+  expect(await page.locator("#answer").inputValue()).toBe("A7K2");
+  expect(asked).toHaveLength(1);
+  expect(asked[0]).toMatchObject({ id: "private_answer", type: "secret", picture: { mime: "image/png" } });
+  // A picture's answer is single use: no save offer rides with it.
+  expect(JSON.stringify(asked)).not.toContain("save");
+});
